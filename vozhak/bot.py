@@ -18,9 +18,9 @@ from telethon.tl.types import InputPeerChannel, InputPeerUser
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
-array_message = [-1002424140672,-1002369574391,-1002422931787,-1002385442088,-1002316623832]
+array_message = [-1002424140672,-1002369574391,-1002422931787,-1002385442088,-1002316623832,-1002328564507,-1002298382107]
 logger = logging.getLogger(__name__)
-bot_token =  '7817513170:AAHiSByrlrUD1rQ8wMtG_7l-zPDOc3ISzdI'
+bot_token =  '7404457828:AAHIo1qBuKlBvEZ5AQAi3JFe9WsB5FmNcEQ'
 conn = sqlite3.connect('teams.db', check_same_thread=False)
 cursor = conn.cursor()
 # Создаем клиента
@@ -29,7 +29,7 @@ user_registrations = {}
 players = []
 waiting_game = {}
 my_id = "6033842569"
-
+array_id=[13,50,13,15,15,8,8]
 putevki='-1002373983158'
 id_put = '6'
 products = [
@@ -244,128 +244,167 @@ products = [
         "image": "30.jpg"
     }
 ]
+products_ids = {}
+message_buy_id = ''
 
-def update_file(team_id, new_balance, commit_message):
-    print(team_id)
-
-
-# Пример функции для проверки баланса
 def check_balance(user_id, price):
     cursor.execute('SELECT team FROM users WHERE id = ?', (user_id,))
     team_id = cursor.fetchone()[0]
     cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
     bal = cursor.fetchone()[0]
 
-    if(price <= bal):
-        cursor.execute('UPDATE team SET balance = balance - ? WHERE id = ?', (price,team_id))
+    if price <= bal:
+        cursor.execute('UPDATE team SET balance = balance - ? WHERE id = ?', (price, team_id))
         conn.commit()
         return True
     else:
         return False
 
-products_ids = {
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()  # Подтверждаем получение запроса
+    user_id = query.from_user.id  # Получаем ID пользователя
 
-}
+    # Логируем информацию о нажатой кнопке
+    logger.info(f"User  {user_id} clicked button with data: {query.data}")
 
-async def start(update, context: ContextTypes.DEFAULT_TYPE):
-    # Отправляем фото и описание по каждому продукту
+    # Разделяем действие и имя из callback_data
+    action, name = query.data.split("_", 1)
+
+    # Проверка на регистрацию
+    if action == "register":
+        if user_id in user_registrations:
+            await  context.bot.send_message(chat_id=query.from_user.id,text=f'Вы уже записаны на мастер-класс: {user_registrations[user_id]}')
+            return  # Прерываем выполнение, если пользователь уже зарегистрирован
+
+        if name in master_classes:
+            if len(master_classes[name]['users']) >= master_classes[name]['places']:
+                await query.edit_message_text(f'Места на мастер-класс "{name}" закончились.')
+            else:
+                master_classes[name]['users'].append(user_id)
+                user_registrations[user_id] = name
+                remaining_places = master_classes[name]['places'] - len(master_classes[name]['users'])
+                reply_markup = register(name)
+                await query.edit_message_text(text=
+                    f'Вы записаны на мастер-класс: {name}\nОставшиеся места: {remaining_places}',reply_markup=reply_markup)
+                await context.bot.send_message(chat_id=user_id, text=f'Вы записаны на мастер-класс: {name}')
+        else:
+            await query.edit_message_text(f'Мастер-класс "{name}" не найден.')
+
+    elif action == "buy":
+        product = next((p for p in products if p['name'] == name), None)
+        if product:
+            cursor.execute('SELECT team FROM users WHERE id = ?', (user_id,))
+            team_id = cursor.fetchone()[0]
+
+            if check_balance(user_id, product['price']):
+                await context.bot.send_message(
+                    chat_id=array_message[team_id - 1],
+                    text=f"{product['name']} теперь в вашем отряде!",
+                )
+
+                if product['name'] in products_ids:
+                    message_id = products_ids[product['name']]
+                    if message_id:
+                        await context.bot.delete_message(
+                            chat_id=update.effective_chat.id,
+                            message_id=message_id
+                        )
+                        del products_ids[product['name']]
+
+                if message_buy_id:
+                    await context.bot.delete_message(
+                        chat_id=update.effective_chat.id,
+                        message_id=message_buy_id
+                    )
+
+                cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
+                bal = cursor.fetchone()[0]
+                chat = array_message[team_id - 1]
+                id = 2
+                if team_id == 6 or team_id == 7:
+                    id = 3
+                await context.bot.edit_message_text(chat_id=chat, message_id=id, text=f'Баланс вашей команды: {bal}')
+                products.remove(product)
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=query.message.message_id)
+
+            else:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=f"Недостаточно средств для покупки {product['name']}.",
+                )
+                await context.bot.delete_message(
+                    chat_id=update.effective_chat.id,
+                    message_id=query.message.message_id
+                )
+        else:
+            await query.edit_message_text(f'Продукт "{name}" не найден.')
+
+async def start(update: Update, context: CallbackContext) -> None:
     for product in products:
         with open(f'photos/{product["image"]}', 'rb') as photo_file:
             try:
                 await asyncio.sleep(1)
+                keyboard = [
+                    [InlineKeyboardButton(text=f"Оплатить путевку для {product['name']}", callback_data=f"buy_{product['name']}")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 message = await context.bot.send_photo(
                     chat_id=update.effective_chat.id,
                     photo=photo_file,
                     message_thread_id=6,
                     caption=f"Имя: {product['name']}\nХарактеристика: {product['description']}\nСтоимость путевки: {product['price']}",
+                    reply_markup=reply_markup,
                 )
-            except RetryAfter as e:
-                await asyncio.sleep(e.retry_after)  # Ждем указанное время
-            products_ids[product['name']] = message.message_id
-    await send_product_list(update, context)
+                products_ids[product['name']] = message.message_id
+            except Exception as e:
+                print(f"Error sending product photo: {e}")
 
-message_buy_id = ''
-async def send_product_list(update, context):
+async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global quizzes
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text('Используйте /mk "кол-во людей" "Название"')
+        return
+
+    try:
+        places = int(args[0])
+        name = ' '.join(args[1:])
+    except ValueError:
+        await update.message.reply_text('Неверный формат количества мест. Используйте /mk "кол-во людей" "Название"')
+        return
+
+    if places <= 0:
+        await update.message.reply_text('Количество мест должно быть больше нуля.')
+        return
+
+    master_classes[name] = {'places': places, 'users': [], 'id': 0}
+    reply_markup = register(name)
+    await update.message.reply_text(f'Название мастер-класса: {name}\nКоличество мест: {places}', reply_markup=reply_markup)
+
+
+def register(name):
     keyboard = [
-        [KeyboardButton(text=f"Оплатить путевку для {product['name']}")] for product in products
+        [InlineKeyboardButton(f"Записаться на '{name}'", callback_data=f"register_{name}")]
     ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        message_thread_id=6,
-        reply_markup=reply_markup,
-        text="Выберите:",  # Ваш текст "Выберите"
-    )
-    message_buy_id = message.message_id  # Сохраняем идентификатор
-
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    product = next((p for p in products if f"Оплатить путевку для {p['name']}" in user_message), None)
-
-    if product:
-        user_id = update.message.from_user.id
-        cursor.execute('SELECT team FROM users WHERE id = ?', (user_id,))
-        team_id = cursor.fetchone()[0]
-
-        if check_balance(user_id, product['price']):
-            await context.bot.send_message(
-                chat_id=array_message[team_id - 1],
-                text=f"{product['name']} теперь в вашем отряде!.",
-            )
-
-            # Удаляем сообщение о продукте по его ID
-            if product['name'] in products_ids:
-                message_id = products_ids[product['name']]
-                if message_id:  # Проверка на наличие идентификатора
-                    await context.bot.delete_message(
-                        chat_id=update.effective_chat.id,
-                        message_id=message_id
-                    )
-                    del products_ids[product['name']]
-
-            # Удаляем предыдущее сообщение "Выберите"
-            if message_buy_id:  # Проверка на наличие идентификатора
-                await context.bot.delete_message(
-                    chat_id=update.effective_chat.id,
-                    message_id=message_buy_id
-                )
-            cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
-            bal = cursor.fetchone()[0]
-            chat = array_message[team_id - 1]
-            await context.bot.edit_message_text(chat_id=chat, message_id=2, text=f'Баланс вашей команды: {bal}')
-            products.remove(product)
-            await send_product_list(update, context)
-            await context.bot.delete_message(message_id=update.message.message_id, chat_id=update.effective_chat.id)
-
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"Недостаточно средств для покупки {product['name']}.",
-            )
-            await context.bot.delete_message(
-                chat_id=update.effective_chat.id,
-                message_id=update.message.message_id
-            )
-
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    return reply_markup
 
 messages_storage = {}
-reactions_storage = {}
-
-async def handle_messages(update: Update, context) -> None:
+async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.message_thread_id == 4:
         message_id = update.message.message_id
-        # Если сообщение еще не в хранилище, добавляем его
         if message_id not in messages_storage:
             messages_storage[message_id] = update.message
+    elif update.message.message_thread_id == 6:
+        await button(update, context)
 
-async def get_reactions(update: Update, context) -> None:
+async def get_reactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message_reaction:
         message_id = update.message_reaction.message_id
         user_id = update.message_reaction.user.id
         username = update.message_reaction.user.username
 
-        # Определяем, была ли реакция добавлена или удалена
         old_reaction = update.message_reaction.old_reaction
         new_reaction = update.message_reaction.new_reaction
 
@@ -374,20 +413,18 @@ async def get_reactions(update: Update, context) -> None:
             team_id = cursor.fetchone()[0]
 
             if new_reaction and not old_reaction:
-                # Реакция добавлена
                 cursor.execute('UPDATE team SET balance = balance + 5 WHERE id = ?', (team_id,))
             elif old_reaction and not new_reaction:
-                # Реакция удалена
                 cursor.execute('UPDATE team SET balance = balance - 5 WHERE id = ?', (team_id,))
 
             conn.commit()
-
             chat = array_message[team_id - 1]
+
             cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
             balance = cursor.fetchone()[0]
-
-            await context.bot.edit_message_text(chat_id=chat, message_id=2, text=f'Баланс вашей команды: {balance}')
-            update_file(team_id,balance,'Update balance')
+            id = 2
+            if team_id == 6 or team_id == 7: id = 3
+            await context.bot.edit_message_text(chat_id=chat, message_id=id, text=f'Баланс вашей команды: {balance}')
 
 async def handle_dice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     dice = update.message.dice
@@ -402,11 +439,10 @@ async def handle_dice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     last_reward_time = datetime.strptime(last_reward_time_str, '%Y-%m-%d %H:%M:%S') if last_reward_time_str else None
 
     if last_reward_time and datetime.now() - last_reward_time < timedelta(hours=4):
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text='Часики еще не дотикали')
+        await context.bot.send_message(chat_id=update.effective_chat.id, text='Часики еще не дотикали')
         return
 
-    if dice.emoji == '🎲':  # Кубик
+    if dice.emoji == '🎲':
         if dice.value == 1:
             new_balance = current_balance + 5
             if new_balance < 0: new_balance = 0
@@ -425,68 +461,58 @@ async def handle_dice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         elif dice.value == 6:
             new_balance = current_balance + 30
             mess = f'Вам выпало число 6! Вы получаете 30 вожиков!'
-        cursor.execute('UPDATE team SET balance=?,last_reward_time = ? WHERE id = ?', (new_balance,datetime.now().strftime('%Y-%m-%d %H:%M:%S'), team_id))
+        cursor.execute('UPDATE team SET balance=?,last_reward_time = ? WHERE id = ?', (new_balance, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), team_id))
         conn.commit()
         chat = array_message[team_id - 1]
-        await context.bot.send_message(chat_id=chat,
-                                       text=mess)
-        await context.bot.edit_message_text(chat_id=chat, message_id=2, text=f'Баланс вашей команды: {balance}')
-        update_file(team_id, balance, 'Update balance')
+        await context.bot.send_message(chat_id=chat, text=mess)
+        id = 2
+        if team_id == 6 or team_id == 7: id = 3
+        await context.bot.edit_message_text(chat_id=chat, message_id=id, text=f'Баланс вашей команды: {new_balance}')
 
-
-async def balance(update:Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
     if update.effective_chat.type != 'private':
         await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
-    if user_id in [391743540,390561523,6755435741,6033842569]:
+    if user_id in [391743540, 390561523, 6755435741, 6033842569]:
         args = context.args
         if len(args) != 2:
-            await context.bot.send_message(chat_id=update.effective_chat.id,
-                                           text='Используйте команду в формате: /balance "номер команды" "число"')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text='Используйте команду в формате: /balance "номер команды" "число"')
             return
 
         target_team = int(args[0])
         try:
             amount = int(args[1])
         except ValueError:
-            await context.bot.send_message(chat_id=update.effective_chat.id,
-                                           text='Пожалуйста, введите корректное число.')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text='Пожалуйста, введите корректное число.')
             return
 
         cursor.execute('SELECT balance FROM team WHERE id = ?', (target_team,))
         existing_user = cursor.fetchone()
 
         if not existing_user:
-            await context.bot.send_message(chat_id=update.effective_chat.id,
-                                           text=f'Команда номер {target_team} не найдена в базе данных.')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f'Команда номер {target_team} не найдена в базе данных.')
             return
 
         cursor.execute('UPDATE team SET balance = balance + ? WHERE id = ?', (amount, target_team))
         conn.commit()
         cursor.execute('SELECT balance FROM team WHERE id = ?', (target_team,))
         bal = cursor.fetchone()[0]
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text=f'Команде номер {target_team} было начислено {amount} вожиков.')
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f'Команде номер {target_team} было начислено {amount} вожиков.')
         chat = array_message[target_team - 1]
-        await context.bot.edit_message_text(chat_id=chat, message_id=2, text=f'Баланс вашей команды: {bal}')
-        update_file(target_team, bal, 'Update balance')
-
+        id = array_id[target_team -1]
+        await context.bot.edit_message_text(chat_id=chat, message_id=id, text=f'Баланс вашей команды: {bal}')
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id,text="Нет доступа к этой команде!")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Нет доступа к этой команде!")
 
 def main():
-    application = ApplicationBuilder().token(bot_token).read_timeout(600).get_updates_read_timeout(600).write_timeout(600).get_updates_write_timeout(600).pool_timeout(600).get_updates_pool_timeout(600).connect_timeout(600).get_updates_connect_timeout(600).build()
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, button_handler))
-
+    application = ApplicationBuilder().token(bot_token).build()
+    application.add_handler(CallbackQueryHandler(button))
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("mk", check_answer))
     application.add_handler(CommandHandler("balance", balance))
     application.add_handler(MessageHandler(filters.Dice.ALL, handle_dice))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
-    application.add_handler(MessageReactionHandler(get_reactions))
 
-    # Сначала добавим общий обработчик для всех кнопок\
-    application.run_polling(read_timeout=600, write_timeout=600, pool_timeout=600, connect_timeout=600, timeout=600)
-
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
