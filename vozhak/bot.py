@@ -2,7 +2,6 @@ import logging
 import sqlite3
 import asyncio
 import time as t
-
 import requests
 import base64
 import json
@@ -14,7 +13,7 @@ from telegram.ext import *
 from datetime import *
 from telethon import TelegramClient
 from telegram.error import TelegramError
-from telegram.constants import UpdateType
+from telegram.constants import UpdateType, ParseMode
 from telethon.tl.functions.messages import GetMessagesReactionsRequest
 from telethon.tl.types import InputPeerChannel, InputPeerUser
 
@@ -292,7 +291,7 @@ async def pstart(update: Update, context: CallbackContext) -> None:
 
 
 mk_to_id = {}
-
+mk_id = {}
 async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global master_classes
     args = context.args
@@ -311,19 +310,79 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text('Количество мест должно быть больше нуля.')
         return
 
-    times = ["12:30", "14:00", "16:30"]
+    # Use the full name to create the master class entry
+    if name == '':
+        times = ["10:30", "13:40", "15:10"]
+    elif name == '':
+        times = ["13:40"]
+    else:
+        times = ["12:30", "13:40", "15:10"]
     master_classes[name] = {'places': {time: places for time in times}, 'users': {time: [] for time in times}, 'id': 0}
     reply_markup = register(name)
 
-    message = await context.bot.send_message(chat_id="-1002373983158", text=f'Название мастер-класса: {name}\n', message_thread_id=919, reply_markup=reply_markup)
+    message = await context.bot.send_message(chat_id="-1002373983158",
+                text=f'Спикер: <b><i>{name}</i></b>\nНазвание: <i>{name}</i>',parse_mode=ParseMode.HTML, message_thread_id=919, reply_markup=reply_markup)
     mk_to_id[name] = message.message_id
 
+master_class_mapping = {
+    'Напарничество: взгляд сверху': 'np1',
+    'Как научиться управлять привычками, которые управляют нами': 'np2',
+    'Исповедь училок или 10 причин почему ты плохой вожатый': 'np3',
+    'Как генерировать людей без 6 пальца или краткий экскурс в мир AI': 'np4',
+    'Какие вопросы задать вселенной, чтобы написать актуальную программу смены? И как исправить все, если вдруг что-то пошло не по плану': 'np5',
+    'От слез к улыбкам: секреты создания атмосферы в лагере': 'np6',
+    'Вожатый тоже актёр': 'np7',
+    'Креативный контент от паблика «Вожатник»': 'np8',
+    'Театр Теней': 'tt1',
+    'Нейровожатый': 'nv1',
+    'Зины': 'zn1',
+    'Медиа и цифровизация': 'md1',
+    'Объединяй вдохновением': 'oi1',
+    'Ненасильственное общение: от напарничества к единству': 'no1',
+    'Мк по созданию настольных игр': 'ng1',
+    'Лови Момент': 'lm1',
+    'Ораторское искусство': 'oi2',
+    'Вожатник': 'vg1',
+    'Дождь мне нашептал': 'dn1',
+    'Создание гимна: от идеии до реализации': 'sg1',
+    'Я - новый Пикассо': 'np9',
+    'Пресс-центр': 'pc1',
+    'Визуальные чтения': 'vc1'
+}
+
+
+master_class_author = {
+    'Напарничество: взгляд сверху': 'np1',
+    'Как научиться управлять привычками, которые управляют нами': 'np2',
+    'Исповедь училок или 10 причин почему ты плохой вожатый': 'np3',
+    'Как генерировать людей без 6 пальца или краткий экскурс в мир AI': 'np4',
+    'Какие вопросы задать вселенной, чтобы написать актуальную программу смены? И как исправить все, если вдруг что-то пошло не по плану': 'np5',
+    'От слез к улыбкам: секреты создания атмосферы в лагере': 'np6',
+    'Вожатый тоже актёр': 'np7',
+    'Креативный контент от паблика «Вожатник»': 'np8',
+}
+
 def register(name):
-    times = ["12:30", "14:00", "16:30"]
+    if name == 'Креативный контент от паблика «Вожатник':
+        times = ["10:30", "15:10"]
+    elif name == 'Напарничество: взгляд сверху':
+        times = ["13:40"]
+    else:
+        times = ["12:30", "13:40", "15:10"]
     keyboard = []
     for time in times:
-        if master_classes[name]['places'][time] > 0:
-            keyboard.append([InlineKeyboardButton(f"Записаться в {time}\n Мест: {master_classes[name]['places'][time]}", callback_data=f"register_{name}_{time}")])
+        if master_clas[name]['places'][time] > 0:
+            # Use the shorter identifier from the mapping
+            short_name = master_class_mapping.get(name, name)
+            callback_data = f"register_{short_name}_{time}"
+            # Ensure callback_data is within the allowed length
+            if len(callback_data.encode('utf-8')) > 64:
+                logger.error(f"Callback data too long: {callback_data}")
+                continue
+            keyboard.append([InlineKeyboardButton(
+                f"Записаться в {time}\n Мест: {master_clas[name]['places'][time]}",
+                callback_data=callback_data
+            )])
     reply_markup = InlineKeyboardMarkup(keyboard)
     return reply_markup
 
@@ -440,6 +499,183 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Нет доступа к этой команде!")
 
+master_classes_data = [
+    {
+        'name': 'Театр Теней',
+        'team': 'Kid.Team',
+        'desc': 'На нашем мк вы сможете познакомиться с искусством театра теней. На нем вы сможете увидеть представление, узнать о том, на сколько полезен может быть театр теней в лагере, а также получите возможность самостоятельно создать декорации и собрать их в собственное представление!',
+        'number': 6,
+        'queue': 1
+    },
+    {
+        'name': 'Нейровожатый',
+        'team': 'Атмосфера',
+        'desc': 'Уникальный мастер-класс для вожатых и организаторов! Научим, как использовать нейросети для облегчения и улучшения лагерной деятельности. Участники узнают, как быстро генерировать контент, создавать сценарии для мероприятий, находить музыку и визуальные материалы с помощью искусственного интеллекта. Каждый сможет попробовать свои силы и получить полезные навыки для решения реальных задач лагеря. Практика, обратная связь и доступные бесплатные инструменты — всё это ждет вас на нашем МК!',
+        'number': 20,
+        'queue': 'X'
+    },
+    {
+        'name': 'Зины',
+        'team': 'Спарта',
+        'desc': 'Зин (англ. «zine») — это независимое печатное издание или мини-журнал, самостоятельно напечатанный автором небольшим тиражом. По факту, малая форма самиздата, способ самовыражения. Зин может быть любого формата, из любого материала и любого содержания. Может быть в единственном экземпляре или выпущен целым тиражом. Сделан как на компьютере, так и в ручную (или комбинированной технике!).',
+        'number': 9,
+        'queue': 'X'
+    },
+    {
+        'name': 'Медиа и цифровизация',
+        'team': 'ПОПЧ',
+        'desc': 'Бу! Испугался? Не бойся, это Медиа и цифровизация #ПОПЧ! На мастер-классе мы расскажем про дизайн для тех, кто давно хотел научиться качественно и быстро работать в figma! Про то, как nfc-метки могут обогатить ваше взаимодействие с детьми и сделать мероприятия интереснее. Погружение в цифровизацию начнется совсем скоро!',
+        'number': 15,
+        'queue': 1
+    },
+    {
+        'name': 'Объединяй вдохновением',
+        'team': 'Вышка Детям',
+        'desc': 'Всем привет! Мы понимаем, как важен обмен опытом, поэтому приглашаем вас на наш мастер-класс! Здесь вы сможете визуализировать свои сильные стороны и особенности вашего педагогического отряда. В итоге вы получите не просто мудборд, а ценную базу контактов для дальнейшего общения. Ждем по одному человеку от вашего педагогического отряда!',
+        'number': 10,
+        'queue': 2
+    },
+    {
+        'name': 'Ненасильственное общение: от напарничества к единству',
+        'team': 'Товарищ',
+        'desc': 'Если хоть раз в вашей жизни при сближении с человеком в работе на просьбы отвечали грубостью, а потребности не замечали — значит, вы столкнулись с насилием. Разбираемся, как улучшить отношения с напарниками, отрядом или детьми, используя методы ненасильственного общения.',
+        'number': 20,
+        'queue': 'X'
+    },
+    {
+        'name': 'Мк по созданию настольных игр',
+        'team': 'Добро',
+        'desc': '',
+        'number': 20,
+        'queue': 'X'
+    },
+    {
+        'name': 'Лови Момент',
+        'team': 'Миллениум',
+        'desc': '«Лови момент» — мастер-класс, где мы научимся превращать обычные повседневные кадры в приятные воспоминания! Будет полезно как для вожатых, так и для начинающих блогеров, которые хотели бы развить личный бренд. Мы ждём всех желающих, кто хотел бы освоить искусство видеоблогинга и научиться создавать качественный и интересный контент. Вы сможете применить полученные знания на практике и создать собственные видеокадры. Не упустите возможность поймать тот самый момент!',
+        'number': 10,
+        'queue': 2
+    },
+    {
+        'name': 'Ораторское искусство',
+        'team': 'Вертикаль',
+        'desc': 'Всем привет! СПО Вертикаль приглашает Вас на мастер класс по ораторскому искусству. На нем мы расскажем о важности правильной речи, покажем несколько действенных упражнений. Так же вы поучаствуете в дебатах где попробуете свои навыки.',
+        'number': 8,
+        'queue': 'X'
+    },
+    {
+        'name': 'Вожатник',
+        'team': 'Многогранник',
+        'desc': 'Мастер-класс по созданию сценического выступления вожатых. Расскажем тонкости и сложности масштабных выступлений вожатых на сцене. Проблемы и их решения, которые могут при этом возникать.',
+        'number': 15,
+        'queue': 1
+    },
+    {
+        'name': 'Дождь мне нашептал',
+        'team': 'Big Family',
+        'desc': 'На мастер-классе вожатская команда «Big family» поделится секретами создания волшебной атмосферы на вечерних сборах с использованием уникальной атрибутики и погрузит участников в атмосферу музыкального огонька, где звуки природы и мелодии вселяют в сердце ощущение магии. Каждый из участников научится создавать инструмент, который зажжет огонь в сердцах детей во время вечернего сбора. А также рассмотрим концепцию саундхилинга и его влияние на снятие эмоционального напряжения. Ждем по одному человеку от вашего педагогического отряда!',
+        'number': 10,
+        'queue': 1
+    },
+    {
+        'name': 'Создание гимна: от идеии до реализации',
+        'team': 'Рассвет',
+        'desc': 'Научимся создавать гимн не только к образу вожатого, а к лагерю и педотряда! На мастер-классе напишем текст гимна для фестиваля "Вожак", подберем музыку и найдем идеальное сочетание слов и мелодий.',
+        'number': 15,
+        'queue': 2
+    },
+    {
+        'name': 'Я - новый Пикассо',
+        'team': 'Сила',
+        'desc': 'Всем известен почерк великого Пикассо, а если нет - не страшно! На нашем Мастер Классе будет возможность сделать для себя или своего близкого портрет собственным руками! Тебе будут предоставлены буквально сотни вариантов разных форм частей лица, из которых ты сможешь собрать что-то индивидуальное - то, как именно ты видишь человека! В конечном результате получится безумно яркий и креативный автопортрет/портрет своего друга или родственника, который позволит тебе подарить эмоции людям и погрузиться как в мир Пикассо, так и в воспоминания об этом мероприятии!',
+        'number': 15,
+        'queue': 'X'
+    },
+    {
+        'name': 'Пресс-центр',
+        'team': 'Мёд',
+        'desc': '',
+        'number': 25,
+        'queue': 2
+    },
+    {
+        'name': 'Визуальные чтения',
+        'team': 'Enjoy Camp',
+        'desc': '',
+        'number': 20,
+        'queue': 2
+    }
+]
+master_clas = {}
+async def po(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global master_clas
+
+    # Подготавливаем данные для мастер-классов
+    master_clas = {}
+
+    for mc in master_classes_data:
+        full_name = mc['name']
+        team = mc['team']
+        desc = mc['desc']
+        queue = mc['queue']
+        place = mc['number']
+
+        # Определяем короткое имя из маппинга
+        short_name = master_class_mapping.get(full_name, None)
+        if not short_name:
+            logger.error(f"Мастер-класс {full_name} не имеет сокращенного имени.")
+            continue
+
+        # Определяем время
+        times = ["17:10"] if queue == 1 else ["18:00"]
+
+        # Если команда еще не добавлена, создаем запись
+        if team not in master_clas:
+            master_clas[team] = {}
+
+        # Добавляем мастер-класс в команду
+        master_clas[team][short_name] = {
+            'full_name': full_name,
+            'places': {time: place for time in times},
+            'users': {time: [] for time in times},
+            'desc': desc,
+        }
+
+        # Создаем клавиатуру для записи
+        reply_markup = create_register_keyboard(team, short_name, times)
+
+        # Отправляем сообщение с форматированной информацией
+        message = await context.bot.send_message(
+            chat_id="-1002373983158",  # Замените на ваш ID чата
+            text=(
+                f"----------------------------------------------------------\n"
+                f"<b>Организатор:</b> {team}\n\n"
+                f"<b>Название:</b> {full_name}\n\n"
+                f"<i>{desc}</i>"
+            ),
+            parse_mode=ParseMode.HTML,
+            message_thread_id=919,  # Замените на нужный ID потока
+            reply_markup=reply_markup
+        )
+        # Сохраняем ID сообщения для отслеживания (если требуется)
+        mk_id[short_name] = message.message_id
+        await asyncio.sleep(1)
+
+
+def create_register_keyboard(team, short_name, times):
+    keyboard = []
+    for time in times:
+        # Проверяем наличие мест
+        if master_clas[team][short_name]['places'][time] > 0:
+            callback_data = f"reg_{team}_{short_name}_{time}"
+            if len(callback_data.encode('utf-8')) > 64:
+                logger.error(f"Callback data too long: {callback_data}")
+                continue
+            keyboard.append([InlineKeyboardButton(
+                f"Записаться в {time}\nМест: {master_clas[team][short_name]['places'][time]}",
+                callback_data=callback_data
+            )])
+    return InlineKeyboardMarkup(keyboard)
 
 class TicTacToe:
     def __init__(self):
@@ -490,33 +726,57 @@ class TicTacToe:
         ---------
         {self.board[6]} | {self.board[7]} | {self.board[8]}
         """
-
+def get_key_by_value(dictionary, value):
+    for key, val in dictionary.items():
+        if val == value:
+            return key
+    return None
 async def handle_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
-    await query.answer()  # Подтверждаем получение запроса
-    user_id = query.from_user.id  # Получаем ID пользователя
+    user_id = query.from_user.id  # Get the user ID
 
-    # Логируем информацию о нажатой кнопке
+    # Log the button data
     logger.info(f"User {user_id} clicked button with data: {query.data}")
 
-    # Разделяем действие, имя и время из callback_data
-    action, *args = query.data.split("_", 2)
+    try:
+        await query.answer()  # Acknowledge the callback query
+    except BadRequest as e:
+        logger.error(f"Error answering callback query: {e}")
+        return
 
-    print(action)
+    # Split the callback data
+    data = query.data.split("_")
+    action, short_name, time = data[0], data[1], data[2]
+    print()
+    # Map the short name back to the full name
+
+
     if action == "register":
-        name, time = args
+        name = get_key_by_value(master_class_mapping, short_name)
         if user_id in user_registrations:
             registered_time = user_registrations[user_id].get(name)
             if registered_time:
-                await context.bot.send_message(chat_id=query.from_user.id, text=f'Вы уже записаны на мастер-класс: {name} в {registered_time}')
-                return  # Прерываем выполнение, если пользователь уже зарегистрирован на это время
+                try:
+                    await query.answer(
+                        text=f'Вы уже записаны на: {name} в {registered_time}',
+                        show_alert=True  # Display as a pop-up alert
+                    )
+                except BadRequest as e:
+                    logger.error(f"Error answering callback query: {e}")
+                return  # Exit if the user is already registered for this time
 
-        # Проверяем, записан ли пользователь на другой мастер-класс в это же время
+        # Check if the user is registered for another master class at the same time
         if user_id in user_registrations:
             for mc_name, mc_time in user_registrations[user_id].items():
                 if mc_time == time:
-                    await context.bot.send_message(chat_id=query.from_user.id, text=f'Вы уже записаны на мастер-класс: {mc_name} в {mc_time}')
-                    return  # Прерываем выполнение, если пользователь уже зарегистрирован на это время
+                    try:
+                        await query.answer(
+                            text=f'Вы уже записаны на: {mc_name} в {mc_time}',
+                            show_alert=True  # Display as a pop-up alert
+                        )
+                    except BadRequest as e:
+                        logger.error(f"Error answering callback query: {e}")
+                    return  # Exit if the user is already registered for this time
 
         if name in master_classes:
             master_classes[name]['users'][time].append(user_id)
@@ -525,61 +785,86 @@ async def handle_callback(update: Update, context: CallbackContext) -> None:
             user_registrations[user_id][name] = time
             master_classes[name]['places'][time] -= 1
             reply_markup = register(name)
-            await query.edit_message_text(text=f'Название мастер-класса: {name}\n', reply_markup=reply_markup)
-            await context.bot.send_message(chat_id=user_id, text=f'Вы записаны на мастер-класс: {name} в {time}')
-        else:
-            await query.edit_message_text(f'Мастер-класс "{name}" не найден.')
-
-    elif action == "buy":
-        name = args[0]
-        product = next((p for p in products if p['name'] == name), None)
-        if product:
-            cursor.execute('SELECT team FROM users WHERE id = ?', (user_id,))
-            team_id = cursor.fetchone()[0]
-
-            if check_balance(user_id, product['price']):
+            await query.edit_message_text(
+                text=f'Спикер: <b><i>{name}</i></b>\nНазвание: <i>{name}</i>',
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup
+            )
+            try:
                 await context.bot.send_message(
-                    chat_id=array_message[team_id - 1],
-                    text=f"{product['name']} теперь в вашем отряде!",
+                    chat_id=6033842569,
+                    text=f'@{query.from_user.username} на: {name} в {time}',
                 )
+            except BadRequest as e:
+                logger.error(f"Error answering callback query: {e}")
+            await context.bot.send_message(chat_id=6033842569, text=f'@{query.from_user.username} {name} в {time}')
 
-                if product['name'] in products_ids:
-                    message_id = products_ids[product['name']]
-                    if message_id:
-                        await context.bot.delete_message(
-                            chat_id=update.effective_chat.id,
-                            message_id=message_id
+
+    elif action == "reg":
+        data = query.data.split("_")
+        if len(data) != 4 or data[0] != "reg":
+            logger.error(f"Invalid callback data: {query.data}")
+            return
+
+        team, short_name, time = data[1], data[2], data[3]
+        user_id = query.from_user.id
+        username = query.from_user.username
+
+        # Проверяем, что мастер-класс существует
+        if team not in master_clas or short_name not in master_clas[team]:
+            logger.error(f"Invalid team or short_name in callback: {query.data}")
+            await query.answer("Ошибка! Мастер-класс не найден.")
+            return
+
+        # Проверяем, записался ли пользователь ранее
+        for t in master_clas:
+            for short, mc_data in master_clas[t].items():
+                for t_slot, users in mc_data['users'].items():
+                    if user_id in users:
+                        await query.answer(
+                            "Вы уже записаны на мастер-класс!",
+                            show_alert=True
                         )
-                        del products_ids[product['name']]
+                        return
 
-                if message_buy_id:
-                    await context.bot.delete_message(
-                        chat_id=update.effective_chat.id,
-                        message_id=message_buy_id
-                    )
+        mc = master_clas[team][short_name]
 
-                cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
-                bal = cursor.fetchone()[0]
-                chat = array_message[team_id - 1]
-                id = array_id[team_id - 1]
-                await context.bot.edit_message_text(chat_id=chat, message_id=id, text=f'Баланс вашей команды: {bal}')
-                products.remove(product)
-                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=query.message.message_id)
+        # Проверяем наличие мест
+        if mc['places'][time] <= 0:
+            await query.answer("Мест больше нет!", show_alert=True)
+            return
 
-            else:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=f"Недостаточно средств для покупки {product['name']}.",
-                )
-                await context.bot.delete_message(
-                    chat_id=update.effective_chat.id,
-                    message_id=query.message.message_id
-                )
-        else:
-            await query.edit_message_text(f'Продукт "{name}" не найден.')
+        # Регистрируем пользователя
+        mc['places'][time] -= 1
+        mc['users'][time].append(user_id)
+
+        # Обновляем сообщение с количеством мест
+        reply_markup = create_register_keyboard(team, short_name, mc['places'].keys())
+        try:
+            await query.edit_message_text(
+                text=(
+                    f"----------------------------------------------------------\n"
+                    f"<b>Организатор:</b> {team}\n\n"
+                    f"<b>Название:</b> {mc['full_name']}\n\n"
+                    f"<i>{mc['desc']}</i>"
+                ),
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup
+            )
+        except BadRequest as e:
+            logger.error(f"Ошибка при обновлении сообщения: {e}")
+
+        # Отправляем сообщение администратору
+        try:
+            await context.bot.send_message(
+                chat_id=6033842569,
+                text=f"@{username} записался на {mc['full_name']} в {time}."
+            )
+        except BadRequest as e:
+            logger.error(f"Ошибка при отправке сообщения администратору: {e}")
 
     elif action == "join":
-        chat_id = int(args[0])
+        chat_id = int(short_name)
         game = games.get(chat_id)
 
         if game is None:
@@ -632,36 +917,26 @@ async def handle_callback(update: Update, context: CallbackContext) -> None:
         winner_symbol, loser_symbol = game.check_winner()
 
         if winner_symbol:
-
             if winner_symbol == 'Draw':
-
-                # Удаляем обоих игроков из чата в случае ничьей
-
-                context.job_queue.run_once(kick_user, 1, data={'chat_id': chat_id, 'user_id': game.player_ids[0]})
-
-                context.job_queue.run_once(kick_user, 2, data={'chat_id': chat_id, 'user_id': game.player_ids[1]})
-
-                await context.bot.send_message(chat_id=putevki,
-
-                                               text=f"Игра закончилась ничьей!\n{game.get_board_str()}",
-                                               message_thread_id=54
-
-                                               )
-
+                # Отправляем сообщение о ничьей в другой чат
+                await context.bot.send_message(
+                    chat_id=putevki,  # Замените на ID целевого чата
+                    text=f"Игра закончилась ничьей!\n{game.get_board_str()}",
+                    message_thread_id=54
+                )
+                await update.callback_query.edit_message_text(
+                    text=f"Игра закончилась ничьей!\n{game.get_board_str()}"
+                )
             else:
-
-                context.job_queue.run_once(kick_user, 1,
-                                           data={'chat_id': chat_id, 'user_id': game.player_ids[loser_symbol]})
-
-                context.job_queue.run_once(kick_user, 2,
-                                           data={'chat_id': chat_id, 'user_id': game.player_ids[winner_symbol]})
-
-                await context.bot.send_message(chat_id=putevki,
-
-                                               text=f"Игрок {winner_symbol} победил!\n{game.get_board_str()}",
-                                               message_thread_id=54
-
-                                               )
+                # Отправляем сообщение о победе в другой чат
+                await context.bot.send_message(
+                    chat_id=putevki,  # Замените на ID целевого чата
+                    text=f"Игрок {game.player_ids[winner_symbol]} победил!\n{game.get_board_str()}",
+                    message_thread_id=54
+                )
+                await update.callback_query.edit_message_text(
+                    text=f"Игрок {game.player_ids[winner_symbol]} победил!\n{game.get_board_str()}"
+                )
 
                 # Логика для обновления баланса команд
 
@@ -819,7 +1094,6 @@ async def player_move(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await context.job_queue.run_once(kick_user,1,data={'chat_id': chat_id, 'user_id': game.player_ids[loser_symbol]})
             await context.job_queue.run_once(kick_user,1,data={'chat_id': chat_id, 'user_id': game.player_ids[winner_symbol]})
             await context.bot.edit_message_text(chat_id=chat, message_id=id, text=f'Баланс вашей команды: {bal[0]}')
-
         for player_id in game.players:
             await context.bot.kick_chat_member(chat_id=chat_id, user_id=player_id)
         await context.bot.send_message(chat_id=chat_id, text="Игра завершена. Всех игроков кикнули из чата.")
@@ -897,15 +1171,26 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await context.bot.send_message(chat_id=putevki,text=task, reply_markup=reply_markup,message_thread_id=57)
             await asyncio.sleep(1)
 
+def xd(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text('Привет! Отправьте мне сообщение, и я перешлю его в другой чат.')
+
+async def forward_message(update: Update, context: CallbackContext) -> None:
+    video_note = update.message.video_note
+
+    # Отправляем видеосообщение в другой чат как новое сообщение
+    await context.bot.send_video_note(chat_id=putevki,message_thread_id=919, video_note=video_note.file_id)
+
 
 def main():
     application = ApplicationBuilder().token(bot_token).build()
     application.add_handler(CommandHandler('help', unban))
     application.add_handler(CommandHandler('tasks',handle_message))
     application.add_handler(CommandHandler("game", start))
-    application.add_handler(CallbackQueryHandler(handle_callback))  # Обработчик движения игрока
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.VIDEO_NOTE, forward_message))
     application.add_handler(MessageHandler(filters.Dice.ALL, handle_dice))
     application.add_handler(CommandHandler("product", pstart))
+    application.add_handler(CommandHandler("po",po))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     application.add_handler(CommandHandler("mk", check_answer))
     application.add_handler(CommandHandler("balance", balance))
