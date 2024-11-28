@@ -32,6 +32,7 @@ waiting_game = {}
 game_chats = [-1002498876619, -4564472209, -4517693420,-4581338414,-4550254545,-4505419264,-4586885712,-4597880004,-4591307105,-4541738040]
 # Словарь для хранения игр
 games = {}
+
 # Словарь для хранения сообщений с кнопками
 room_messages = {}
 my_id = "6033842569"
@@ -255,7 +256,8 @@ products_ids = {}
 message_buy_id = ''
 
 def check_balance(user_id, price):
-    cursor.execute('SELECT team FROM users WHERE id = ?', (user_id,))
+
+    cursor.execute('SELECT team FROM users WHERE username = ?', (user_id,))
     team_id = cursor.fetchone()[0]
     cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
     bal = cursor.fetchone()[0]
@@ -389,12 +391,14 @@ def register(name):
 messages_storage = {}
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.message_thread_id == 4:
+        print("yes")
         message_id = update.message.message_id
         if message_id not in messages_storage:
             messages_storage[message_id] = update.message
 
 async def get_reactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message_reaction:
+        print("Received a reaction")
         message_id = update.message_reaction.message_id
         user_id = update.message_reaction.user.id
         username = update.message_reaction.user.username
@@ -402,27 +406,39 @@ async def get_reactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         old_reaction = update.message_reaction.old_reaction
         new_reaction = update.message_reaction.new_reaction
 
+        print(f"Message ID: {message_id}, User ID: {user_id}, Username: {username}, Old Reaction: {old_reaction}, New Reaction: {new_reaction}")
+
         if message_id in messages_storage:
-            cursor.execute('SELECT team FROM users WHERE id = ?', (user_id,))
-            team_id = cursor.fetchone()[0]
+            cursor.execute('SELECT team FROM users WHERE username = ?', (username,))
+            team_id = cursor.fetchone()
+            if team_id is None:
+                print(f"No team found for user ID: {user_id}")
+                return
+            team_id = team_id[0]
 
             if new_reaction and not old_reaction:
                 cursor.execute('UPDATE team SET balance = balance + 5 WHERE id = ?', (team_id,))
+                print(f"Added 5 to team {team_id}'s balance")
             elif old_reaction and not new_reaction:
                 cursor.execute('UPDATE team SET balance = balance - 5 WHERE id = ?', (team_id,))
+                print(f"Subtracted 5 from team {team_id}'s balance")
 
             conn.commit()
             chat = array_message[team_id - 1]
 
             cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
-            balance = cursor.fetchone()[0]
-            id = array_id[team_id-1]
+            balance = cursor.fetchone()
+            if balance is None:
+                print(f"No balance found for team ID: {team_id}")
+                return
+            balance = balance[0]
+            id = array_id[team_id - 1]
             await context.bot.edit_message_text(chat_id=chat, message_id=id, text=f'Баланс вашей команды: {balance}')
-
 async def handle_dice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     dice = update.message.dice
     user_id = update.message.from_user.id
-    cursor.execute('SELECT team FROM users WHERE id = ?', (user_id,))
+    username = update.message.from_user.username
+    cursor.execute('SELECT team FROM users WHERE username = ?', (username,))
     team_id = cursor.fetchone()[0]
     cursor.execute('SELECT balance FROM team WHERE id = ?', (team_id,))
     current_balance = cursor.fetchone()[0]
@@ -527,8 +543,8 @@ master_classes_data = [
     },{
         'name': 'Мк по созданию настольных игр',
         'team': 'Добро',
-        'desc': '',
-        'number': 1,
+        'desc': 'Твори, чувствуй и играй! 🦄🎲\nПО «Добро» приглашает в свою игровую комнату, чтобы погрузить вас в мир создания настольных игр!\nЭти знания вы сможете использовать не только в личной жизни, но и на работе в лагере. \nМы предоставим вам возможность познакомиться с тонкостями создания игр, поделимся известными механиками и нашими личными лайфхаками. 🤫 \nС нами вы научитесь делать игры для детей любого возраста, попытаетесь создать собственную прямо во время мастер-класса, а ещё сможете попробовать угощения, которые мы для вас приготовили.😋💜\nБудем ждать вас на мастер-классе!',
+        'number': 10,
         'queue': 1
     },{
         'name': 'Я - новый Пикассо',
@@ -541,12 +557,6 @@ master_classes_data = [
         'name': 'Нейровожатый',
         'team': 'Атмосфера',
         'desc': 'Уникальный мастер-класс для вожатых и организаторов! Научим, как использовать нейросети для облегчения и улучшения лагерной деятельности. Участники узнают, как быстро генерировать контент, создавать сценарии для мероприятий, находить музыку и визуальные материалы с помощью искусственного интеллекта. Каждый сможет попробовать свои силы и получить полезные навыки для решения реальных задач лагеря. Практика, обратная связь и доступные бесплатные инструменты — всё это ждет вас на нашем МК!',
-        'number': 20,
-        'queue': 1
-    },{
-        'name': 'Ненасильственное общение: от напарничества к единству',
-        'team': 'Товарищ',
-        'desc': 'Если хоть раз в вашей жизни при сближении с человеком в работе на просьбы отвечали грубостью, а потребности не замечали — значит, вы столкнулись с насилием. Разбираемся, как улучшить отношения с напарниками, отрядом или детьми, используя методы ненасильственного общения.',
         'number': 20,
         'queue': 1
     },
@@ -565,7 +575,13 @@ master_classes_data = [
         'number': 10,
         'queue': 2
     },
-    
+    {
+        'name': 'Ненасильственное общение: от напарничества к единству',
+        'team': 'Товарищ',
+        'desc': 'Если хоть раз в вашей жизни при сближении с человеком в работе на просьбы отвечали грубостью, а потребности не замечали — значит, вы столкнулись с насилием. Разбираемся, как улучшить отношения с напарниками, отрядом или детьми, используя методы ненасильственного общения.',
+        'number': 20,
+        'queue': 'X'
+    },
 
     {
         'name': 'Лови Момент',
@@ -601,7 +617,7 @@ master_classes_data = [
     {
         'name': 'Визуальные чтения',
         'team': 'Enjoy Camp',
-        'desc': '',
+        'desc': 'Мы познакомим зрителей с уникальным форматом вечернего мероприятия, которое можно провести с детьми в рамках лагерной смены.\n\nЗрители погрузятся в удивительный мир литературы, где прямо на их глазах оживут герои рассказа. Каждый сможет на себе прочувствовать и окунуться в атмосферу творчества вместе с рассказчиком. \n\nВизуальные чтения:\n🔮 Открывают новые смыслы и тайны произведений\n🎶 Музыка наполняет атмосферу новыми эмоциями и раскрывает глубокие оттенки каждого рассказа\n🎨 Художники превращают текст в живые картины\n\n💬 Это шанс взглянуть на современную литературу с другой стороны, обсудить увиденное, поделиться впечатлениями и понять, как и зачем такой формат взаимодействия с детьми можно применять в лагерной среде.',
         'number': 20,
         'queue': 2
     }
@@ -682,14 +698,17 @@ class TicTacToe:
         self.board = [' ' for _ in range(9)]  # 3x3 поле
         self.current_player = 'X'  # Начинает X
         self.players = []  # Список игроков
-        self.player_ids = {'X': None, 'O': None}  # Словарь, который связывает символ с ID игрока
+        self.player_ids = {'X': None, 'O': None}
+        self.player_nicks = {'X': None, 'O': None} # Словарь, который связывает символ с ID игрока
 
-    def add_player(self, player_id):
+    def add_player(self, player_id,player_nick):
         if len(self.players) < 2 and player_id not in self.players:
             if len(self.players) == 0:
-                self.player_ids['X'] = player_id  # Первому игроку даем символ X
+                self.player_ids['X'] = player_id
+                self.player_nicks['X'] = player_nick# Первому игроку даем символ X
             else:
-                self.player_ids['O'] = player_id  # Второму игроку даем символ O
+                self.player_ids['O'] = player_id
+                self.player_nicks['O'] = player_nick# Второму игроку даем символ O
             self.players.append(player_id)
             return True
         return False
@@ -940,11 +959,11 @@ async def handle_callback(update: Update, context: CallbackContext) -> None:
 
                 # Логика для обновления баланса команд
 
-                cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_ids[winner_symbol],))
+                cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_nicks[winner_symbol],))
 
                 team_win = cursor.fetchone()
 
-                cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_ids[loser_symbol],))
+                cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_nicks[loser_symbol],))
 
                 team_lose = cursor.fetchone()
 
@@ -1068,9 +1087,9 @@ async def player_move(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
 
         # Логика для обновления баланса команд
-        cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_ids[winner_symbol],))
+        cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_nicks[winner_symbol],))
         team_win = cursor.fetchone()
-        cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_ids[loser_symbol],))
+        cursor.execute('SELECT team FROM users WHERE id = ?', (game.player_nicks[loser_symbol],))
         team_lose = cursor.fetchone()
 
         if team_win and team_lose:
@@ -1183,7 +1202,10 @@ async def forward_message(update: Update, context: CallbackContext) -> None:
 
 def main():
     application = ApplicationBuilder().token(bot_token).build()
+
+    application.add_handler(MessageReactionHandler(get_reactions))
     application.add_handler(CommandHandler('help', unban))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
     application.add_handler(CommandHandler('tasks',handle_message))
     application.add_handler(CommandHandler("game", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
