@@ -395,6 +395,35 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         message_id = update.message.message_id
         if message_id not in messages_storage:
             messages_storage[message_id] = update.message
+async def send_team_usernames(update: Update, context: CallbackContext) -> None:
+    # Получаем номер команды из аргументов команды
+    args = context.args
+    if not args or not args[0].isdigit():
+        await update.message.reply_text('Пожалуйста, укажите номер команды. Например: /team 4')
+        return
+
+    team_id = int(args[0])
+
+    # Выполняем запрос к базе данных для получения всех пользователей из указанной команды
+    cursor.execute('SELECT username FROM users WHERE team = ?', (team_id,))
+    users = cursor.fetchall()
+
+    if not users:
+        await update.message.reply_text(f'Команда номер {team_id} не найдена или в ней нет пользователей.')
+        return
+
+    # Формируем строку с пользователями через пробел
+    usernames = ' '.join([user[0] for user in users])
+    invite = await context.bot.create_chat_invite_link(chat_id=array_message[team_id-1])
+    keyboard = [
+
+        [InlineKeyboardButton(f"Комната", url=invite.invite_link)]
+
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Отправляем сообщение с пользователями
+    await context.bot.send_message(chat_id=putevki,message_thread_id=4,text=f'{usernames}',reply_markup=reply_markup)
 
 async def get_reactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message_reaction:
@@ -1302,6 +1331,7 @@ def main():
 
     application.add_handler(MessageReactionHandler(get_reactions))
     application.add_handler(CommandHandler('help', unban))
+    application.add_handler(CommandHandler('team', send_team_usernames))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
     application.add_handler(CommandHandler('tasks',handle_message))
     application.add_handler(CommandHandler("game", start))
