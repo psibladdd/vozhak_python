@@ -623,6 +623,56 @@ master_classes_data = [
     }
 ]
 master_clas = {}
+speaking = {}
+master_classes_da = {
+    'Форум «Новая этика»':'Вы из тех людей, кто считает, что можно слушать Инстасамку в лагере, или все-таки сторонники жестких этических рамок? \nНастало время расставить все точки над «И» в формате живой дискуссии. Да наступит время новой этики!',
+    'Музыкальная группа «Во что горазд»': 'Мама с детства говорила пойти в музыкалку, но что-то как-то мимо? Не беда! Мы организуем свою группу, где будет все необходимое: губная гармошка, трещетки, бубен, а главное, треугольник… если все-таки вы профи, то ждём вас и ваш любимый музыкальный инструмент. И помните, если вам наступил на ухо медведь — это еще не повод не подпевать «Алые паруса»',
+    'Клуб анонимных педагогов «Да, было»': 'Что было в лагере, остается в лагере… Какие-то истории стыдно рассказывать маме, какие-то запрещено рассказывать детям… Мы понимаем и полностью принимаем вас, педагоги! На сегодняшнем клубе анонимных педагогов вас не осудят ни за одну историю!',
+    'Танцевальная студия «Вау ю кэн рили данс!»':'Если вы не танцевали в своей жизни ничего кроме танца маленьких утят, то вы по адресу! В нашей танцевальной студии нет злых педагогов: мы просто повторяем за веселыми аватарами из джастдэнсов и много смеемся. Тем более завтра диско: надо заготовить парочку танцевальных связок, чтобы затмить на танцполе всех!',
+    'Театральная мастерская «Коллаборация Пикчерс не представляет»':'Давно хотели стать актером? Мечтаете сняться в кино? А может… закатаете уже губу?!  В нашей мастерской мы попробуем найти в себе талант перевоплощения с помощью ролевой игры. Да-да! Вы примерите на себя роль, сможете устроиться на работу, жениться, умереть, а главное — заработать билеты банка приколов! А чтобы актером стать, надо было в ГИТИС поступать…',
+    'Коллективный сборник «Игротека 2.0»':'Мы хотим с вами сыграть в игру… во много игр… много новых игр! Наверняка, у вас есть любимая игра, которую вы хотите показать всему вожатскому комьюнити, обсудить сходства и различия в правилах проведения игротеки, а возможно — придумать несколько новых игр. Игроделы всех педотрядов — объединяйтесь!'
+}
+async def speak(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global speaking
+
+    # Подготавливаем данные для мастер-классов
+    speaking = {}
+
+    for mc in master_classes_da.keys():
+        full_name = mc
+        desc = master_classes_da[mc]
+        count = 15  # Количество мест для каждого мастер-класса
+
+        # Определяем короткое имя из маппинга
+        short_name = master_class_mapping.get(full_name, None)
+        if not short_name:
+            logger.error(f"Мастер-класс {full_name} не имеет сокращенного имени.")
+            continue
+
+        # Если команда еще не добавлена, создаем запись
+        if full_name not in speaking:
+            speaking[full_name] = {
+                'desc':desc,
+                'place':15
+            }
+
+        # Создаем клавиатуру для записи
+        reply_markup = create_reg_keyboard(short_name, count)
+
+        # Отправляем сообщение с форматированной информацией
+        message = await context.bot.send_message(
+            chat_id="-1002373983158",  # Замените на ваш ID чата
+            text=(
+                f"<i><b>{get_key_by_value(master_class_mapping, short_name)}</b></i>\n{speaking[short_name]}"
+            ),
+            parse_mode=ParseMode.HTML,
+            message_thread_id=919,  # Замените на нужный ID потока
+            reply_markup=reply_markup
+        )
+        # Сохраняем ID сообщения для отслеживания (если требуется)
+        mk_id[short_name] = message.message_id
+        await asyncio.sleep(1)
+
 async def po(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global master_clas
 
@@ -678,12 +728,12 @@ async def po(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await asyncio.sleep(1)
 
 
-def create_register_keyboard(team, short_name, times):
+def create_register_keyboard(team,short_name,times):
     keyboard = []
     for time in times:
         # Проверяем наличие мест
         if master_clas[team][short_name]['places'][time] > 0:
-            callback_data = f"reg_{team}_{short_name}_{time}"
+            callback_data = f"regi_{team}_{short_name}_{time}"
             if len(callback_data.encode('utf-8')) > 64:
                 logger.error(f"Callback data too long: {callback_data}")
                 continue
@@ -691,6 +741,16 @@ def create_register_keyboard(team, short_name, times):
                 f"Записаться в {time}\nМест: {master_clas[team][short_name]['places'][time]}",
                 callback_data=callback_data
             )])
+    return InlineKeyboardMarkup(keyboard)
+
+def create_reg_keyboard(short_name, count):
+    keyboard = []
+    if count > 0:
+        callback_data = f"reg_{short_name}"
+        keyboard.append([InlineKeyboardButton(
+            text=f"Записаться\nМест: {count}",
+            callback_data=callback_data,
+        )])
     return InlineKeyboardMarkup(keyboard)
 
 class TicTacToe:
@@ -881,6 +941,42 @@ async def handle_callback(update: Update, context: CallbackContext) -> None:
             )
         except BadRequest as e:
             logger.error(f"Ошибка при отправке сообщения администратору: {e}")
+    elif action == "regi":
+            # Проверяем, записался ли пользователь ранее
+            for t in master_clas:
+                for short, mc_data in master_clas[t].items():
+                    for t_slot, users in mc_data['users'].items():
+                        if user_id in users:
+                            await query.answer(
+                                "Вы уже записаны на мастер-класс!",
+                                show_alert=True
+                            )
+                            return
+
+            mc = master_clas[short_name]
+
+            # Обновляем сообщение с количеством мест
+            reply_markup = create_reg_keyboard(short_name, mc['places'][time])
+            try:
+                await query.edit_message_text(  # Замените на ваш ID чата
+                    text=(
+                        f"<i><b>{get_key_by_value(master_class_mapping, short_name)}</b></i>\n{master_clas[short_name]}"
+                    ),
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=reply_markup
+                )
+            except BadRequest as e:
+                logger.error(f"Ошибка при обновлении сообщения: {e}")
+
+            # Отправляем сообщение администратору
+            try:
+                username = query.from_user.username
+                await context.bot.send_message(
+                    chat_id=6033842569,
+                    text=f"@{username} записался на {get_key_by_value(master_class_mapping, short_name)}."
+                )
+            except BadRequest as e:
+                logger.error(f"Ошибка при отправке сообщения администратору: {e}")
 
     elif action == "join":
         chat_id = int(short_name)
@@ -1194,10 +1290,11 @@ def xd(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('Привет! Отправьте мне сообщение, и я перешлю его в другой чат.')
 
 async def forward_message(update: Update, context: CallbackContext) -> None:
-    video_note = update.message.video_note
+    if update.effective_chat.type == Chat.PRIVATE:
+        video_note = update.message.video_note
 
-    # Отправляем видеосообщение в другой чат как новое сообщение
-    await context.bot.send_video_note(chat_id=putevki,message_thread_id=919, video_note=video_note.file_id)
+        # Отправляем видеосообщение в другой чат как новое сообщение
+        await context.bot.send_video_note(chat_id=putevki, message_thread_id=919, video_note=video_note.file_id)
 
 
 def main():
@@ -1212,6 +1309,7 @@ def main():
     application.add_handler(MessageHandler(filters.VIDEO_NOTE, forward_message))
     application.add_handler(MessageHandler(filters.Dice.ALL, handle_dice))
     application.add_handler(CommandHandler("product", pstart))
+    application.add_handler(CommandHandler("speak",speak))
     application.add_handler(CommandHandler("po",po))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     application.add_handler(CommandHandler("mk", check_answer))
